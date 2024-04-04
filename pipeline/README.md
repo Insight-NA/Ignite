@@ -1,0 +1,2 @@
+# Pipeline
+Deployment of solution or artifacts belong here.  This is not applicable to many types of projects like reference architectures, example solutions, starter projects, or toolkits.  However microservices, containers, or accellerators should include some templates or resources to quickly deploy the solution as-is, with all dependencies in place (i.e. if your microservice requies Redis cache and a service bus, those should be included in the deployment templates).
