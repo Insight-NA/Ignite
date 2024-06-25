@@ -229,8 +229,10 @@ def send_request():
     body = dpg.get_value("Body")
     auth_type = dpg.get_value("AuthType")
     auth = dpg.get_value("auth")
-
-    payload = json.dumps(json.loads(body))
+    try:
+        bodyPayload = json.dumps(json.loads(body))
+    except:
+        bodyPayload = False
 
     headers = {
         'Content-Type': 'application/json',
@@ -247,31 +249,34 @@ def send_request():
     if auth_type == "Bearer":
         headers['Authorization'] = f"{auth_type} {auth}"
 
-    if(payload ==  {}): #If no params dont send the request
-        response = requests.request(request_type, url, headers=headers, data=payload)
-    else:
-        response = requests.request(request_type, url, headers=headers, data=payload, params=payload)
+    if(bodyPayload != False):
+        if(payload ==  {}): #If no params dont send the request
+            response = requests.request(request_type, url, headers=headers, data=bodyPayload)
+        else:
+            response = requests.request(request_type, url, headers=headers, data=bodyPayload, params=payload)
         
         
 
-    dpg.set_value("Status", response.status_code)
-    dpg.set_value("RequestURL", url)
-    dpg.set_value("RequestType", request_type)
+        dpg.set_value("Status", response.status_code)
+        dpg.set_value("RequestURL", url)
+        dpg.set_value("RequestType", request_type)
 
-    if response.status_code == 200:
-        try:
-            json_data = json.loads(response.text)
-            pretty_json = json.dumps(json_data, indent=4)
-        except:
-            pretty_json = ""
-        dpg.set_value("Content", pretty_json)
-        result = {"Status": response.status_code, "Content": pretty_json, "RequestType" : request_type, "RequestURL" : url}
+        if response.status_code == 200:
+            try:
+                json_data = json.loads(response.text)
+                pretty_json = json.dumps(json_data, indent=4)
+            except:
+                pretty_json = ""
+            dpg.set_value("Content", pretty_json)
+            result = {"Status": response.status_code, "Content": pretty_json, "RequestType" : request_type, "RequestURL" : url}
+        else:
+            result = {"Status": response.status_code, "Content": response.reason, "RequestType" : request_type, "RequestURL" : url}
+
+        sentRequestsResults[str(len(sentRequestsResults))] = result
+
+        dpg.configure_item("savedResultsList", items=list(sentRequestsResults.keys()))
     else:
-        result = {"Status": response.status_code, "Content": response.reason, "RequestType" : request_type, "RequestURL" : url}
-
-    sentRequestsResults[str(len(sentRequestsResults))] = result
-
-    dpg.configure_item("savedResultsList", items=list(sentRequestsResults.keys()))
+        dpg.set_value("Content", "Unable to format JSON, please verify validity of body")
 
 def create_menu_bar():
     """
