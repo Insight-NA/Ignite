@@ -6,7 +6,9 @@ import requests
 
 
 numberOfHeaders = 1
+numberOfParams = 1
 headerItems = {}
+paramItems = {}
 
 savedRequests = {}
 savedRequestsNames = []
@@ -45,7 +47,6 @@ def update_request_call(sender, app_data):
     for header_key in headerItems.keys():
         dpg.delete_item(header_key)
     headerItems = {}
-
     global numberOfHeaders
     numberOfHeaders = 1
 
@@ -54,6 +55,18 @@ def update_request_call(sender, app_data):
         user_data = ["header_table", list(header.keys())[0], header[list(header.keys())[0]]]
         add_header(None, None, user_data)
 
+    # Delete old params and reset values
+    global paramItems
+    for param_key in paramItems.keys():
+        dpg.delete_item(param_key)
+    paramItems = {}
+    global numberOfParams
+    numberOfParams = 1
+
+    # Add headers from the saved request to the GUI
+    for param in savedRequests[app_data]["Params"]:
+        user_data = ["param_table", list(param.keys())[0], param[list(param.keys())[0]]]
+        add_param(None, None, user_data)
         
 def update_result(sender, app_data):
     """
@@ -61,6 +74,8 @@ def update_result(sender, app_data):
     """
     dpg.set_value("Status", sentRequestsResults[app_data]["Status"])
     dpg.set_value("Content", sentRequestsResults[app_data]["Content"])
+    dpg.set_value("RequestType", sentRequestsResults[app_data]["RequestType"])
+    dpg.set_value("RequestURL", sentRequestsResults[app_data]["RequestURL"])
 
 
 def cancel_save():
@@ -83,6 +98,19 @@ def set_number_of_headers(new_value):
     global numberOfHeaders
     numberOfHeaders = new_value
 
+def get_number_of_params():
+    """
+    Get the current number of parameters.
+    """
+    return numberOfParams
+
+def set_number_of_params(new_value):
+    """
+    Set a new value for the number of parameters.
+    """
+    global numberOfParams
+    numberOfParams = new_value
+
 
 def save_request_to_file():
     """
@@ -98,13 +126,20 @@ def save_request_to_file():
                 dpg.get_value(headerItems[key]["HeaderTag"]): dpg.get_value(headerItems[key]["ValueTag"])
             }
             headers.append(header_item)
+        params = []
+        for key in paramItems.keys():
+            param_item = {
+                dpg.get_value(paramItems[key]["ParamTag"]): dpg.get_value(paramItems[key]["ValueTag"])
+            }
+            params.append(param_item)
         
         request_details = {
             "URL": dpg.get_value("URL"),
             "Auth": dpg.get_value("URL"),
             "Type": dpg.get_value("Type"),
             "Body": dpg.get_value("Body"),
-            "Headers": headers
+            "Headers": headers,
+            "Params": params,
         }
 
         global savedRequests
@@ -149,6 +184,23 @@ def add_header(sender, app_data, user_data):
     
     set_number_of_headers(get_number_of_headers() + 1)
 
+def add_param(sender, app_data, user_data):
+    """
+    Add a new parameter row to the parameter table.
+    """
+    param_index = str(get_number_of_params())
+    
+    with dpg.table_row(parent=user_data[0], tag="param" + param_index):
+        dpg.add_input_text(hint="Key", tag="Param" + param_index + "Key", default_value=user_data[1])
+        dpg.add_input_text(hint="Value", tag="Param" + param_index + "Value", default_value=user_data[2])
+        dpg.add_button(label="X", width=50, callback=delete_param, user_data="param" + param_index)
+
+    paramItems["param" + param_index] = {
+        "ParamTag": "Param" + param_index + "Key",
+        "ValueTag": "Param" + param_index + "Value"
+    }
+    
+    set_number_of_params(get_number_of_params() + 1)
 
 def delete_header(sender, app_data, user_data):
     """
@@ -157,7 +209,12 @@ def delete_header(sender, app_data, user_data):
     del headerItems[user_data]
     dpg.delete_item(user_data)
 
-
+def delete_param(sender, app_data, user_data):
+    """
+    Delete a param row from the params table.
+    """
+    del paramItems[user_data]
+    dpg.delete_item(user_data)
 
 def send_request():
     """
@@ -165,6 +222,7 @@ def send_request():
     """
     dpg.set_value("Status", "")
     dpg.set_value("Content", "")
+    dpg.set_value("RequestType", "")
 
     request_type = dpg.get_value("Type")
     url = dpg.get_value("URL")
@@ -179,22 +237,37 @@ def send_request():
     }
     for key in headerItems.keys():
         headers[dpg.get_value(headerItems[key]["HeaderTag"])] = dpg.get_value(headerItems[key]["ValueTag"])
+        
+    payload = {}
+    for key in paramItems.keys():
+        payload[dpg.get_value(paramItems[key]["ParamTag"])] = dpg.get_value(paramItems[key]["ValueTag"])
+        
+    
 
     if auth_type == "Bearer":
         headers['Authorization'] = f"{auth_type} {auth}"
 
-    response = requests.request(request_type, url, headers=headers, data=payload)
+    if(payload ==  {}): #If no params dont send the request
+        response = requests.request(request_type, url, headers=headers, data=payload)
+    else:
+        response = requests.request(request_type, url, headers=headers, data=payload, params=payload)
+        
+        
 
     dpg.set_value("Status", response.status_code)
     dpg.set_value("RequestURL", url)
+    dpg.set_value("RequestType", request_type)
 
     if response.status_code == 200:
-        json_data = json.loads(response.text)
-        pretty_json = json.dumps(json_data, indent=4)
+        try:
+            json_data = json.loads(response.text)
+            pretty_json = json.dumps(json_data, indent=4)
+        except:
+            pretty_json = ""
         dpg.set_value("Content", pretty_json)
-        result = {"Status": response.status_code, "Content": pretty_json}
+        result = {"Status": response.status_code, "Content": pretty_json, "RequestType" : request_type, "RequestURL" : url}
     else:
-        result = {"Status": response.status_code, "Content": ""}
+        result = {"Status": response.status_code, "Content": response.reason, "RequestType" : request_type, "RequestURL" : url}
 
     sentRequestsResults[str(len(sentRequestsResults))] = result
 
@@ -219,7 +292,7 @@ dpg.create_context()
 
 # Create the main viewport
 dpg.create_viewport()
-create_menu_bar()
+# create_menu_bar()
 # Set up DearPyGui
 dpg.setup_dearpygui()
 
@@ -263,7 +336,13 @@ with dpg.window(width=600, height=500, label="Request", no_close=True):
             dpg.add_table_column(label="Value")
             dpg.add_table_column(label="Delete")
         dpg.add_button(label="Add New Header", callback=add_header, user_data=["header_table", "", ""])
-    
+        
+    with dpg.collapsing_header(label="Params", default_open=False):
+        with dpg.table(tag="param_table") as param_table:
+            dpg.add_table_column(label="Key")
+            dpg.add_table_column(label="Value")
+            dpg.add_table_column(label="Delete")
+        dpg.add_button(label="Add New Param", callback=add_param, user_data=["param_table", "", ""])
     # Request section
     with dpg.collapsing_header(label="Request", default_open=True):
         dpg.add_text(default_value="URL")
@@ -282,6 +361,9 @@ with dpg.window(label="Results", pos=(0, 520), width=275, height=225, no_close=T
     with dpg.group(horizontal=True):
         dpg.add_text(default_value="Status Code:")
         dpg.add_text(label="Status", tag="Status")
+    with dpg.group(horizontal=True):    
+        dpg.add_text(default_value="Request Type:")
+        dpg.add_text(label="RequestType", tag="RequestType")
     with dpg.group(horizontal=True):
         dpg.add_text(default_value="Content:")
     with dpg.group(horizontal=True):
