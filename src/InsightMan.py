@@ -13,6 +13,7 @@ paramItems = {}
 savedRequests = {}
 savedRequestsNames = []
 sentRequestsResults = {}
+selectedRequest = ""
 
 windowPositionsFile = "window_positions.json"
 font_path = os.path.join(os.path.dirname(__file__), 'Resources', 'Roboto-Black.ttf')
@@ -38,8 +39,12 @@ def update_request_call(sender, app_data):
     """
     Update the request call based on saved request data.
     """
+    global selectedRequest
+    selectedRequest = app_data
+    
     dpg.set_value("URL", savedRequests[app_data]["URL"])
     dpg.set_value("Type", savedRequests[app_data]["Type"])
+    dpg.set_value("auth", savedRequests[app_data]["Auth"])
     dpg.set_value("Body", savedRequests[app_data]["Body"])
 
     # Delete old headers and reset values
@@ -135,7 +140,7 @@ def save_request_to_file():
         
         request_details = {
             "URL": dpg.get_value("URL"),
-            "Auth": dpg.get_value("URL"),
+            "Auth": dpg.get_value("auth"),
             "Type": dpg.get_value("Type"),
             "Body": dpg.get_value("Body"),
             "Headers": headers,
@@ -165,6 +170,22 @@ def save_request():
         dpg.add_input_text(hint="Request Name", tag="SaveName")
         dpg.add_button(label="Save", callback=save_request_to_file)
         dpg.add_button(label="Cancel", callback=cancel_save)
+        
+        
+def delete_request():
+    global savedRequests
+    global savedRequestsNames
+    
+    print(selectedRequest)
+    if selectedRequest in savedRequests:
+        del savedRequests[selectedRequest]
+        
+        savedRequestsNames.remove(selectedRequest)        
+        
+        with open(os.path.join(dir_path, 'savedRequests.txt'), 'w') as f:
+            f.write(json.dumps(savedRequests))
+        
+        dpg.configure_item("savedRequestsList", items=savedRequestsNames)
 
 def add_header(sender, app_data, user_data):
     """
@@ -251,11 +272,17 @@ def send_request():
 
     if(bodyPayload != False):
         if(payload ==  {}): #If no params dont send the request
-            response = requests.request(request_type, url, headers=headers, data=bodyPayload)
+            try:
+                response = requests.request(request_type, url, headers=headers, data=bodyPayload)
+            except Exception as error:
+                 dpg.set_value("Content", error)
+                 return False;
         else:
-            response = requests.request(request_type, url, headers=headers, data=bodyPayload, params=payload)
-        
-        
+            try:
+                response = requests.request(request_type, url, headers=headers, data=bodyPayload, params=payload)
+            except Exception as error:
+                 dpg.set_value("Content", error) 
+                 return False;
 
         dpg.set_value("Status", response.status_code)
         dpg.set_value("RequestURL", url)
@@ -296,7 +323,7 @@ def create_menu_bar():
 dpg.create_context()
 
 # Create the main viewport
-dpg.create_viewport()
+dpg.create_viewport(title="Ignite, An Insight API Testing Tool")
 # create_menu_bar()
 # Set up DearPyGui
 dpg.setup_dearpygui()
@@ -382,6 +409,7 @@ with dpg.window(label="History", pos=(520, 520), width=275, height=225, no_close
 with dpg.window(label="Saved Requests", pos=(700, 0), width=275, height=505, no_close=True) as saved_requests_window:
     dpg.add_listbox(items=savedRequestsNames, width=200, num_items=10, tag="savedRequestsList", callback=update_request_call)
     dpg.add_button(label="Save Current Request", callback=save_request)
+    dpg.add_button(label="Delete Current Request", callback=delete_request)
 
 
 def resize_img():
